@@ -1,169 +1,79 @@
-const http = require('http');
-const https = require('https');
-const { URL } = require('url');
+const {
+    SlashCommandBuilder
+} = require("discord.js");
+const http = require("http"),
+    https = require("https"),
+    {
+        URL
+    } = require("url");
 
 module.exports = {
-  data: {
-    name: 'postbin',
-    description: 'ps4 goldhen payload run'
-  },
+    data: new SlashCommandBuilder()
+        .setName("postbin")
+        .setDescription("Send a .bin payload to a PS4 GoldHEN target")
+        .addStringOption(o => o.setName("ip").setDescription("Target IP").setRequired(true))
+        .addAttachmentOption(o => o.setName("file").setDescription(".bin payload").setRequired(true))
+        .addIntegerOption(o => o.setName("port").setDescription("Port (default: 9090)").setRequired(false)),
 
-  async execute(target, client) {
-    const isInteraction = typeof target.isCommand === 'function' && typeof target.deferReply === 'function';
-    const isMessage = typeof target.content === 'string' && target.attachments;
+    async execute(i) {
+        await i.deferReply();
+        const ip = i.options.getString("ip"),
+            port = i.options.getInteger("port") || 9090;
+        const a = i.options.getAttachment("file");
+        if (!a.name ?.toLowerCase().endsWith(".bin")) return i.editReply("Attach a `.bin` file.");
 
-    function replyEphemeral(interaction, text) {
-      try {
-        if (interaction.replied || interaction.deferred) return interaction.followUp({ content: text, ephemeral: true });
-        return interaction.reply({ content: text, ephemeral: true });
-      } catch (e) {
-        if (interaction.channel) return interaction.channel.send(text);
-      }
-    }
-
-    function downloadToBuffer(fileUrl) {
-      return new Promise((resolve, reject) => {
-        const clientLib = fileUrl.startsWith('https://') ? https : http;
-        clientLib.get(fileUrl, (res) => {
-          if (res.statusCode !== 200) return reject(new Error(`Download failed: status ${res.statusCode}`));
-          const chunks = [];
-          res.on('data', c => chunks.push(c));
-          res.on('end', () => resolve(Buffer.concat(chunks)));
-          res.on('error', reject);
-        }).on('error', reject);
-      });
-    }
-
-    function postBinary(targetUrl, buffer, timeout = 7000) {
-      return new Promise((resolve, reject) => {
-        let parsed;
+        const url = `http://${ip}:${port}/upload`;
         try {
-          parsed = new URL(targetUrl);
-        } catch (e) {
-          return reject(new Error('Invalid target URL'));
+            await i.editReply(`Downloading **${a.name}** (${a.size} bytes)...`);
+            const buf = await new Promise((res, rej) => {
+                (a.url.startsWith("https://") ? https : http).get(a.url, r => {
+                    if (r.statusCode !== 200) return rej(new Error(`Download failed: ${r.statusCode}`));
+                    const chunks = [];
+                    r.on("data", c => chunks.push(c));
+                    r.on("end", () => res(Buffer.concat(chunks)));
+                    r.on("error", rej);
+                }).on("error", rej);
+            });
+
+            await i.editReply(`Posting **${a.name}** (${buf.length} bytes) to \`${url}\`...`);
+            const res = await new Promise((res, rej) => {
+                let u;
+                try {
+                    u = new URL(url);
+                } catch {
+                    return rej(new Error("Invalid URL"));
+                }
+                const opts = {
+                    method: "POST",
+                    hostname: u.hostname,
+                    port: u.port,
+                    path: u.pathname + u.search,
+                    headers: {
+                        "Content-Type": "application/octet-stream",
+                        "Content-Length": buf.length,
+                        "User-Agent": "discord-bot-postbin/1.0"
+                    },
+                    timeout: 7000
+                };
+                const req = (u.protocol === "https:" ? https : http).request(opts, r => {
+                    const chunks = [];
+                    r.on("data", c => chunks.push(c));
+                    r.on("end", () => res({
+                        statusCode: r.statusCode,
+                        body: Buffer.concat(chunks).toString("utf8")
+                    }));
+                });
+                req.on("error", rej);
+                req.on("timeout", () => req.destroy(new Error("Timeout")));
+                req.write(buf);
+                req.end();
+            });
+
+            const preview = (res.body || "").slice(0, 1000);
+            await i.editReply(`POST complete — status ${res.statusCode}.\nResponse:\n\`\`\`\n${preview}\n\`\`\``);
+        } catch (err) {
+            console.error("[postbin] error:", err);
+            await i.editReply(`Failed: ${err?.message || String(err)}`);
         }
-
-        const opts = {
-          method: 'POST',
-          hostname: parsed.hostname,
-          port: parsed.port,
-          path: parsed.pathname + parsed.search,
-          headers: {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': buffer.length,
-            'User-Agent': 'discord-bot-postbin/1.0'
-          },
-          timeout
-        };
-
-        const req = (parsed.protocol === 'https:' ? https : http).request(opts, (res) => {
-          const chunks = [];
-          res.on('data', c => chunks.push(c));
-          res.on('end', () => {
-            const body = Buffer.concat(chunks).toString('utf8');
-            resolve({ statusCode: res.statusCode, body });
-          });
-        });
-
-        req.on('error', reject);
-        req.on('timeout', () => req.destroy(new Error('Request timed out')));
-        req.write(buffer);
-        req.end();
-      });
     }
-    if (isInteraction) {
-      const interaction = target;
-      await interaction.deferReply();
-      let ip = null;
-      let port = null;
-      let attachment = null;
-
-      try {
-        const optIp = interaction.options?.getString?.('ip');
-        const optPort = interaction.options?.getInteger?.('port');
-        const optAtt = interaction.options?.getAttachment?.('file');
-        if (optIp) ip = optIp;
-        if (optPort) port = optPort;
-        if (optAtt) attachment = optAtt;
-      } catch (e) {
-      }
-      if (!ip || !attachment) {
-        const possibleAttach = interaction.options?._hoistedOptions?.find(o => o?.attachment)?.attachment;
-        if (possibleAttach && !attachment) attachment = possibleAttach;
-      }
-
-      if (!ip) {
-        await interaction.editReply('Please provide the target IP.');
-        return;
-      }
-
-      if (!attachment) {
-        await interaction.editReply('You must provide a `.bin` attachment in the `file`.');
-        return;
-      }
-
-      if (!attachment.name || !attachment.name.toLowerCase().endsWith('.bin')) {
-        await interaction.editReply('Please attach a file with a `.bin` extension.');
-        return;
-      }
-
-      const finalPort = port || 3000;
-      const targetUrl = `http://${ip}:${finalPort}/upload`;
-
-      try {
-        await interaction.editReply(`Downloading **${attachment.name}** (${attachment.size} bytes)...`);
-        const buf = await downloadToBuffer(attachment.url);
-
-        await interaction.editReply(`Posting **${attachment.name}** (${buf.length} bytes) to \`${targetUrl}\`...`);
-        const res = await postBinary(targetUrl, buf);
-
-        const preview = (res.body || '').slice(0, 1000);
-        await interaction.editReply(`POST complete — status ${res.statusCode}.\nResponse:\n\`\`\`\n${preview}\n\`\`\``);
-      } catch (err) {
-        console.error('[postbin][interaction] error:', err);
-        await interaction.editReply(`Failed: ${err && err.message ? err.message : String(err)}`);
-      }
-
-      return;
-    }
-
-    if (isMessage) {
-      const message = target;
-      const prefixParts = message.content.trim().split(/\s+/);
-      const cmdToken = prefixParts[0] || '';
-      const ip = prefixParts[1] || null;
-      const port = prefixParts[2] ? parseInt(prefixParts[2], 10) : 3000;
-
-      if (!ip) {
-        return message.reply('Usage: `!postbin <ip> [port]` with the .bin file attached to the same message.');
-      }
-
-      if (!message.attachments.size) {
-        return message.reply('Attach the .bin file to the same message when you run the command.');
-      }
-
-      const attachment = message.attachments.first();
-      if (!attachment.name || !attachment.name.toLowerCase().endsWith('.bin')) {
-        return message.reply('Please attach a file with a `.bin` extension.');
-      }
-
-      const targetUrl = `http://${ip}:${port}/upload`;
-      try {
-        const initMsg = await message.channel.send(`Downloading attachment **${attachment.name}** (${attachment.size} bytes)...`);
-        const buf = await downloadToBuffer(attachment.url);
-
-        await initMsg.edit(`Posting **${attachment.name}** (${buf.length} bytes) to \`${targetUrl}\`...`);
-        const res = await postBinary(targetUrl, buf);
-        const preview = (res.body || '').slice(0, 1000);
-
-        await initMsg.edit(`POST complete — status ${res.statusCode}.\nResponse \n\`\`\`\n${preview}\n\`\`\``);
-      } catch (err) {
-        console.error('[postbin][message] error:', err);
-        await message.channel.send('Failed to POST binary: ' + (err && err.message ? err.message : String(err)));
-      }
-
-      return;
-    }
-    console.warn('[postbin] execute called with unknown target type');
-  }
 };

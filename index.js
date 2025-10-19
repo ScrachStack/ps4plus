@@ -1,52 +1,72 @@
-const { Client, Intents, Collection, MessageActionRow, MessageButton, MessageSelectMenu , Modal, TextInputComponent, MessageEmbed} = require('discord.js');
-const fs = require('fs');
-global.config = require('./config');
-const path = require('path');
+const fs = require("fs"),
+    path = require("path");
+const {
+    Client,
+    GatewayIntentBits,
+    Partials,
+    Events,
+    REST,
+    Routes,
+    Collection
+} = require("discord.js");
+const config = require("./config");
+const {
+    token,
+    clientId
+} = config;
 
 const client = new Client({
-    intents: [
-      Intents.FLAGS.GUILDS,
-      Intents.FLAGS.GUILD_MEMBERS, 
-      Intents.FLAGS.GUILD_MESSAGES,
-    ]
-  });
-  client.commands = new Collection();
+    intents: Object.values(GatewayIntentBits),
+    partials: Object.values(Partials)
+});
+client.commands = new Collection();
 
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
-for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
-    client.commands.set(command.data.name, command);
-}
-
-client.once('ready', async () => {
-    config.guildIds.forEach(guildID => {
-        const guild = client.guilds.cache.get(guildID);
-        if (guild) {
-            console.log(`[Sync Studios]: Commands Loaded In ${guild.name}`);
-            console.log("[Sync Studios] PS$+++: Loading ....")
-            console.log("[Sync Studios] Support: https://disboard.org/server/join/1119734000974565439")
-            console.log("[Sync Studios] Made By ScratchStack")
-            guild.commands.set(Array.from(client.commands.values()).map(cmd => cmd.data)).catch(err => {
-                console.error(`[Sync Studios]: Failed to set commands for ${guild.name}:`, err);
-            });
-        } else {
-            console.log(`[Sync Studios]: Guild not found: ${guildID}`);
+const commands = fs.readdirSync(path.join(__dirname, "commands"))
+    .filter(f => f.endsWith(".js"))
+    .map(f => {
+        const cmd = require(`./commands/${f}`);
+        if (cmd ?.data && cmd ?.execute) {
+            client.commands.set(cmd.data.name, cmd);
+            return cmd.data.toJSON();
         }
-    });
+    }).filter(Boolean);
+
+const rest = new REST({
+    version: "10"
+}).setToken(token);
+
+client.once(Events.ClientReady, () => {
+    console.log(`[Sync Studios]: Bot logged in as ${client.user.tag}`);
+    console.log("[Sync Studios] PS$+++: Loading ....");
+    console.log("[Sync Studios] Support: https://disboard.org/server/join/1119734000974565439");
+    console.log("[Sync Studios] Made By ScratchStack");
 });
 
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isCommand()) return;
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+client.on(Events.InteractionCreate, async i => {
+    if (!i.isChatInputCommand()) return;
+    const cmd = client.commands.get(i.commandName);
+    if (!cmd) return i.reply({
+        content: "Command not found.",
+        ephemeral: true
+    });
     try {
-        await command.execute(interaction, client);
-    } catch (error) {
-        console.error(error);
-        await interaction.reply({ content: 'An error occurred while executing this command!', ephemeral: true });
+        await cmd.execute(i);
+    } catch (err) {
+        console.error(`[Command Error] ${i.commandName}`, err);
+        i.reply({
+            content: "There was an error executing this command.",
+            ephemeral: true
+        });
     }
 });
 
-
-  
-client.login(config.token);
+(async () => {
+    try {
+        await rest.put(Routes.applicationCommands(clientId), {
+            body: commands
+        });
+    } catch (err) {
+        console.error("[Command Sync Error]", err);
+    }
+    await client.login(token);
+})();
