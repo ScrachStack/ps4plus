@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ScratchStack - PS4 Payload Sender</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      body { background: linear-gradient(180deg,#0f1724 0%, #0b1220 100%); color: #e6eef8; }
+
+      .glow-title {
+        text-shadow:
+          0 2px 6px rgba(99,102,241,0.35),
+          0 6px 20px rgba(99,102,241,0.12);
+      }
+
+      .file-btn:focus { outline: none; box-shadow: 0 0 0 4px rgba(59,130,246,0.12); }
+
+      .glass {
+        background: rgba(10, 13, 20, 0.6);
+        backdrop-filter: blur(6px) saturate(120%);
+        -webkit-backdrop-filter: blur(6px) saturate(120%);
+      }
+      #preloader {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(6,9,15,0.95), rgba(6,9,15,0.9));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 60;
+        transition: opacity .35s ease, visibility .35s ease;
+      }
+      #preloader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    </style>
+  </head>
+
+  <body class="min-h-screen flex items-center justify-center px-4">
+    <div id="preloader">
+      <div class="flex flex-col items-center gap-4">
+        <div class="w-14 h-14 rounded-full border-4 border-t-transparent border-white/20 animate-spin"></div>
+        <div class="text-sm text-white/60">Preparing the payload UI…</div>
+      </div>
+    </div>
+
+    <div class="glass p-8 rounded-3xl shadow-2xl max-w-lg w-full">
+      <header class="mb-6 text-center">
+        <h1 class="text-4xl font-extrabold glow-title tracking-tight">
+          <span class="inline-block bg-clip-text text-transparent" style="background: linear-gradient(25deg,#60a5fa00,#7c3aed06);">
+            PS4 Payload Sender
+          </span>
+        </h1>
+        <p class="mt-2 text-sm text-white/60">Send .bin payloads to GoldHEN targets on your network.</p>
+      </header>
+
+      <% if (error) { %>
+        <div class="mb-4 rounded-lg bg-red-700/90 p-3 text-sm">
+          ❌ <%= error %>
+        </div>
+      <% } %>
+
+      <% if (result) { %>
+        <div class="mb-4 rounded-lg bg-emerald-700/90 p-3 text-sm">
+          ✅ Upload Complete — Status: <%= result.status %>
+        </div>
+        <pre class="mb-4 rounded-lg p-3 bg-black/60 text-xs whitespace-pre-wrap overflow-x-auto"><%= result.body %></pre>
+      <% } %>
+
+      <form action="/upload" method="POST" enctype="multipart/form-data" class="space-y-4">
+        <div>
+            <label class="block text-sm font-semibold text-gray-200 tracking-wide mb-1">
+                Target IP <span class="text-gray-400 font-normal">(e.g. 192.168.1.12)</span>
+              </label>
+                        <input
+            type="text"
+            name="ip"
+            required
+            placeholder="e.g. 192.168.1.12"
+            class="w-full p-3 bg-white/3 rounded-lg border border-white/6 placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+          />
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-200 tracking-wide mb-1">
+                Port <span class="text-gray-400 font-normal">(default 9090)</span>
+              </label>
+                        <input
+            type="number"
+            name="port"
+            placeholder="9090"
+            class="w-full p-3 bg-white/3 rounded-lg border border-white/6 placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs text-white/60 mb-1">.bin Payload</label>
+
+          <div class="flex items-center gap-3">
+            <input id="file" name="file" type="file" accept=".bin" required class="hidden" />
+
+            <label
+              for="file"
+              class="file-btn inline-flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer select-none border border-white/6 bg-gradient-to-b from-white/3 to-white/2 text-sm font-medium shadow-sm hover:brightness-105 transition"
+              tabindex="0"
+            >
+              <svg class="w-5 h-5 opacity-80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span id="fileLabel">Choose .bin file</span>
+            </label>
+
+            <div id="filename" class="text-sm text-white/60 truncate max-w-xs">No file chosen</div>
+          </div>
+
+          <p class="mt-2 text-xs text-white/40">Only <code class="bg-white/3 px-1 rounded">.bin</code> files are accepted.</p>
+        </div>
+
+        <button
+          type="submit"
+          class="w-full mt-2 inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 transition text-white font-semibold shadow-lg"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M19 12H5" />
+          </svg>
+          Send Payload
+        </button>
+      </form>
+
+      <footer class="mt-6 text-center text-xs text-white/40 flex flex-col items-center gap-2">
+      
+        <a
+          href="https://github.com/ScrachStack"
+          target="_blank"
+          class="mt-1 inline-flex items-center gap-1 text-white/50 hover:text-blue-400 transition duration-300"
+        >
+          Made with 
+          <span class="text-red-500 animate-pulse">❤️</span>
+          by <span class="font-semibold glow-link">ScratchStack</span>
+        </a>
+      </footer>
+      
+    </div>
+
+    <script>
+      window.addEventListener("load", () => {
+        const p = document.getElementById("preloader");
+        p.classList.add("hidden");
+      });
+
+      const fileInput = document.getElementById("file");
+      const fileLabel = document.getElementById("fileLabel");
+      const filename = document.getElementById("filename");
+
+      fileInput.addEventListener("change", () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) {
+          fileLabel.textContent = "Choose .bin file";
+          filename.textContent = "No file chosen";
+          return;
+        }
+        fileLabel.textContent = "Change file";
+        filename.textContent = f.name + " — " + Intl.NumberFormat().format(f.size) + " bytes";
+      });
+
+      const labelBtn = document.querySelector(".file-btn");
+      labelBtn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          fileInput.click();
+        }
+      });
+    </script>
+  </body>
+</html>
