@@ -37,5 +37,12 @@ This project is built with **Node.js**, **discord.js**, **Express**, **EJS**, an
    ```bash
    git clone https://github.com/ScrachStack/ps4plus.git
    cd ps4plus
+```
+npm install --save
+
+node .
+
+```
 
 
+> Licensed under the MIT License
