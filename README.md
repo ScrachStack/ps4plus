@@ -2,4 +2,4 @@
 Discord.js Bot for sending payloads to a homebrew PS4 and more.
 
 
-<img width="2880" height="1634" alt="image" src="https://github.com/user-attachments/assets/a8a60c23-623f-47e0-a6bf-5317e3f42c9b" />
+<img width="2880" height="1632" alt="image" src="https://github.com/user-attachments/assets/d25cd131-b713-4447-9701-49b3be0eb2a6" />
