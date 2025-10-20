@@ -70,3 +70,93 @@ client.on(Events.InteractionCreate, async i => {
     }
     await client.login(token);
 })();
+
+
+const express = require("express");
+const multer = require("multer");
+const http = require("http");
+const https = require("https");
+const { URL } = require("url");
+
+const app = express();
+const upload = multer({ dest: "uploads/" });
+
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
+app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
+
+app.get("/", (req, res) => {
+  res.render("index", { result: null, error: null });
+});
+
+app.post("/upload", upload.single("file"), async (req, res) => {
+  const ip = req.body.ip;
+  const port = req.body.port || 9090;
+
+  if (!ip || !req.file) {
+    return res.render("index", {
+      result: null,
+      error: "Missing IP or file.",
+    });
+  }
+
+  const filePath = req.file.path;
+  const fileBuffer = fs.readFileSync(filePath);
+  const url = `http://${ip}:${port}/upload`;
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const u = new URL(url);
+      console.log(u.hostname)
+      console.log(u.port)
+      const options = {
+        method: "POST",
+        hostname: u.hostname,
+        port: u.port,
+        path: u.pathname + u.search,
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": fileBuffer.length,
+          "User-Agent": "ps4plus-web/1.0",
+        },
+        timeout: 150000,
+      };
+
+      const request = (u.protocol === "https:" ? https : http).request(
+        options,
+        (r) => {
+          let body = "";
+          r.on("data", (chunk) => (body += chunk));
+          r.on("end", () =>
+            resolve({ status: r.statusCode, body: body.slice(0, 500) })
+          );
+        }
+      );
+
+      request.on("error", reject);
+      request.on("timeout", () =>
+        request.destroy(new Error("Connection Timeout"))
+      );
+      request.write(fileBuffer);
+      request.end();
+    });
+
+    res.render("index", {
+      result: result,
+      error: null,
+    });
+  } catch (err) {
+    res.render("index", {
+      result: null,
+      error: err.message || "Unknown error occurred.",
+    });
+  } finally {
+    fs.unlinkSync(filePath);
+  }
+});
+
+const PORT = 3000;
+app.listen(PORT, () =>
+  console.log(`[PSPlus Web] Running at http://localhost:${PORT}`)
+);
