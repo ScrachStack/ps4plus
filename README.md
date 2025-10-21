@@ -44,5 +44,10 @@ node .
 
 ```
 
+### Credits
+
+- ScratchStack Application Development
+- oysters (rfoodxmodz) payloads (GTAV + RDR2)
+
 
 > Licensed under the MIT License
